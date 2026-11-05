@@ -20,7 +20,7 @@ void validateMaterial(const SurfaceMaterial& m) {
     if (!nonnegative(m.restitution) || m.restitution > 1.0 ||
         !nonnegative(m.staticFriction) || !nonnegative(m.dynamicFriction) ||
         m.dynamicFriction > m.staticFriction || !nonnegative(m.rollingResistance) ||
-        !nonnegative(m.spinningFriction)) {
+        !nonnegative(m.spinningFriction) || !nonnegative(m.impactBraking)) {
         throw std::invalid_argument("Invalid surface coefficients");
     }
 }

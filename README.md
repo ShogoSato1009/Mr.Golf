@@ -1,8 +1,7 @@
-# Mr. Golf: stage 1 physics
+# Mr. Golf: ball physics and 3D visualization
 
-A standalone C++17 library. Only ball physics and the data needed by physics are
-implemented. There are no input, rendering, game-loop, or third-party runtime
-dependencies.
+The C++17 physics library can run on its own. Stage 2 adds a Windows 3D demo
+that follows a test shot from launch to rest and can export a fixed-rate MP4.
 
 ## Build and test
 
@@ -18,10 +17,72 @@ ctest --test-dir build -C Debug --output-on-failure
 registered with CTest; its checks stay enabled in Release builds.
 No test framework or network download is needed by CMake.
 
-Validated on 2026-11-05 on Windows x64 using Clang 20.1.2 (Zig 0.15.2),
-CMake 4.4.4 and Ninja 1.13.2, Debug configuration: clean compiler output,
-34/34 internal cases passed, CTest 1/1 passed (2.17 seconds total).
-The temporary toolchain is kept in the ignored `.tools/` directory.
+On Windows, `golf_demo` and `demo_tests` build by default. Use
+`-DGOLF_BUILD_DEMO=OFF` to build only the physics library and its tests.
+`demo_tests` checks the full shot, an output rate that does not divide the
+physics rate, trajectory changes under debug overrides, and camera tracking.
+
+## Debug preview and video
+
+From the project root on Windows with a single-config build:
+
+```powershell
+Copy-Item configs/demo.cfg build/debug.cfg
+.\build\golf_demo.exe --preview build/debug.cfg
+.\build\golf_demo.exe --summary configs/demo.cfg
+python tools/export_mp4.py --demo build/golf_demo.exe --config configs/demo.cfg --output outputs/stage2-golf-retuned.mp4
+```
+
+For a Visual Studio build, use `build/Debug/golf_demo.exe`. The preview uses
+Windows OpenGL and GDI. MP4 export also requires Python 3 and `ffmpeg` with
+`libx264` on `PATH`. The exporter leaves an existing output file untouched.
+
+Edit and save the configuration passed to `--preview` to replay with new settings.
+The integration test uses `configs/demo.cfg` as the baseline shot. The
+preview holds the last frame until the next edit or until the window closes.
+Each export uses one configuration snapshot. `--summary` runs without opening
+a window and reports contact and rest times, apex, landing angle, and horizontal
+distances. Carry ends at first contact. Run is the horizontal displacement from
+that contact to the final position, including the bounces. Both use the first
+recorded contact tick as an estimate. The video displays carry and run after landing.
+
+The configuration uses `key = value` lines, with `#` comments and SI units.
+The supplied example is editable, and omitted keys use defaults. In particular:
+
+| Change | Keys |
+| --- | --- |
+| Terrain geometry | `terrain_height`, `slope_x`, `slope_z`, `hill_amplitude`, `hill_length`; set `hill_amplitude = 0` for a plane. |
+| Ground response | `restitution`, `impact_braking`, `static_friction`, `dynamic_friction`, `rolling_resistance`, `spin_friction` |
+| Wind and atmosphere | `wind_x`, `wind_y`, `wind_z`, `gravity_x`, `gravity_y`, `gravity_z`, `air_density` |
+| Ball and solver | `mass`, `radius`, `drag`, `lift_slope`, `spin_decay`, `physics_dt`, `max_substep` |
+| Launch and spin | `start_x`, `start_z`, `start_height`, `impulse_x/y/z`, `angular_impulse_x/y/z` (use a separate key for each axis) |
+| Camera and export | `camera_x/y/z`, `camera_response`, `camera_fov`, `width`, `height`, `fps`, `max_duration`, `end_hold` |
+
+`physics_dt` defaults to 1/240 s. The demo records the fixed-tick states, then
+interpolates a read-only display sample at `frame_number / fps`. Changing
+`fps` does not change the simulation or its stopping point. The terrain mesh
+samples the physics heightfield. The ball is drawn at its physical radius;
+the locator ring and height line help track it at a distance. The chase camera
+smooths its target, leads moving shots, and moves closer for ground motion.
+The video uses the same render path
+as the preview and writes H.264 at 1280×720 and 30 fps by default.
+
+This demo uses Windows' software OpenGL bitmap path so capture does not depend
+on a visible or unoccluded window. High resolutions can render slower than real
+time; the exported frame times still follow `fps`. The terrain mesh has a fixed
+5 m sampling grid, so steep or tightly curved debug terrains can show a visible
+gap between the mesh and the exact heightfield. A GPU backend and a finer mesh
+near the ball are possible improvements if the preview needs higher fidelity.
+
+The demo approximates a medium fairway using restitution `0.22`, impact braking
+`0.55`, and rolling resistance `0.145`. Table 1 of the [USGA/R&A fairway
+report](https://assets.randa.org/c42c7bf4-dca7-00ea-4f2e-373223f80f76/250b3e34-9172-4ad1-991f-9d5560cbf832/Proposed%20Bounce%20Model%20for%20Use%20in%20Evaluating%20Optimum%20Overall%20Distance.pdf)
+reports about 14–34 m of bounce and roll at a 39° landing angle across several
+turf tests. The demo lands at about 38.6° and runs 19.9 m. With the same material
+on flat ground, checks at 27.4 m/s and about 1,800 rpm of backspin give 30.5,
+18.4, and 8.7 m at 33°, 39°, and 45°, respectively. These are approximate
+gameplay coefficients for the demonstrated conditions. Turf moisture, grass,
+and landing conditions can change the run substantially.
 
 ## Using the library
 
@@ -77,6 +138,10 @@ exception; a failed call leaves the caller's ball unchanged.
   effective inverse mass `1/m + r*r/I`, capped by Coulomb friction times normal
   impulse. This transfers momentum between translation and rotation. Below a
   configurable incoming normal speed, restitution is zero to avoid chatter.
+  Optional `impactBraking` approximates the loss of translational speed to turf
+  deformation. Before Coulomb friction it removes up to `impactBraking * |v_n|`
+  from the tangential speed, capped at that speed. Omitted coefficients and the
+  generic surface presets default to zero for this term.
 * **Contact and rolling:** remove inward normal acceleration, integrate tangent
   forces, apply rolling resistance torque `mu_r*N*r`, then solve static/dynamic
   friction with the same effective mass. Under sufficient static friction,
@@ -148,7 +213,11 @@ Limits of this stage:
 * `src/shot/ShotCommand.hpp`: physical impulse data only.
 * `tests/PhysicsTests.cpp`: analytic, energy, contact, material, convergence,
   determinism, long-run stability and invalid-input checks.
+* `src/rendering/Camera.*`, `Renderer.*`: chase camera and 3D scene with diagnostics.
+* `src/demo/DebugConfig.*`, `Simulation.*`, `RunDemo.*`: test configuration,
+  trajectory sampling, and preview or capture orchestration.
+* `tools/export_mp4.py`: reads the offscreen frame stream and runs FFmpeg.
 
 Dependencies follow `core -> world/shot data -> physics -> caller` in terms of
-data provision; physics includes only core, world and shot data. World and core
-never include physics. The module responsibilities in `AGENTS.md` are unchanged.
+data provision. Rendering reads the ball state and terrain without running the
+solver; the demo owns the connection between the two.

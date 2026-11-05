@@ -45,9 +45,15 @@ src/
   rendering/
     Renderer.hpp / .cpp
     Camera.hpp / .cpp
+  demo/
+    DebugConfig.hpp / .cpp
+    Simulation.hpp / .cpp
+    RunDemo.hpp / .cpp
   game/
     GameController.hpp / .cpp
 tests/
+configs/
+tools/
 ```
 
 | モジュール | 責務 |
@@ -58,6 +64,7 @@ tests/
 | `input` | 操作機器からの入力取得とスイング情報の解析。 |
 | `shot` | 解析済みの操作情報を物理的なショット指令に変換。 |
 | `rendering` | 状態の表示とカメラ制御。物理状態を変更しない。 |
+| `demo` | 検証用ショットの設定、固定刻みの実行、描画時刻のサンプリング、プレビューと動画用フレームの出力。 |
 | `game` | モジュールの接続、更新順序、ゲーム進行、UIの統合。 |
 | `main.cpp` | 起動・終了と初期化。個別のゲーム処理を集約しない。 |
 
@@ -81,6 +88,8 @@ Terrain / Environment → BallPhysics
 - `Terrain`と`Environment`は物理計算に必要な情報を提供する。
   地形の取得・問い合わせと、衝突応答の計算を分離する。
 - `Renderer`は`BallState`などを読み取り専用で参照し、物理演算に介入しない。
+- 第2段階の動作検証では`demo`が物理と描画を接続する。`demo`にゲーム進行や操作入力を持たせず、`physics`、`world`、`rendering`から`demo`を参照しない。
+  デバッグ用の設定は`configs/`、フレームをMP4に変換するツールは`tools/`に置く。
 
 ## 実装順序
 

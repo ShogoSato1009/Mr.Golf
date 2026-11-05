@@ -34,6 +34,16 @@ void resolveImpact(BallState& s, Vec3 n, const BallParameters& b,
     const double restitution = -vn > bounceThreshold ? m.restitution : 0.0;
     const double normalImpulse = -(1.0 + restitution)*b.mass*vn;
     s.velocity += (normalImpulse/b.mass)*n;
+    if (m.impactBraking > 0.0) {
+        // Approximate the translational energy absorbed by deforming turf during impact.
+        // Limit the loss to the incoming tangential speed before solving contact friction.
+        const Vec3 travel = tangent(s.velocity, n);
+        const double speed = length(travel);
+        if (speed > 0.0) {
+            const double loss = std::min(speed, m.impactBraking*(-vn));
+            s.velocity -= (loss/speed)*travel;
+        }
+    }
     applyFriction(s, n, normalImpulse, b, m);
 }
 

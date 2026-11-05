@@ -14,6 +14,7 @@ struct SurfaceMaterial {
     double dynamicFriction = 0.30;
     double rollingResistance = 0.025; // Resisting torque = coefficient * N * radius.
     double spinningFriction = 0.015;  // Torque about contact normal / (N*radius).
+    double impactBraking = 0.0;      // Tangential speed lost per unit incoming normal speed.
 };
 
 // Gameplay starting points; callers may replace any coefficient.

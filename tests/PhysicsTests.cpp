@@ -237,14 +237,26 @@ int main() {
             near(collision::slipVelocity(s, {0, 1, 0}, BallParameters{}.radius), {}, 1e-12, "sticking");
         }},
         {"impact friction never adds total kinetic energy", [] {
+            auto turf = materialFor(SurfaceType::Fairway);
+            turf.impactBraking = 0.55;
             for (double spin : {-800.0, -50.0, 0.0, 300.0, 1000.0}) {
-                BallState s;
-                s.velocity = {10, -5, -2};
-                s.angularVelocity = {spin/3, spin/2, spin};
-                const double before = energy(s);
-                collision::resolveImpact(s, {0, 1, 0}, {}, materialFor(SurfaceType::Fairway), 0.2);
-                check(energy(s) <= before+1e-12, "impact created energy");
+                for (const auto& material : {materialFor(SurfaceType::Fairway), turf}) {
+                    BallState s;
+                    s.velocity = {10, -5, -2};
+                    s.angularVelocity = {spin/3, spin/2, spin};
+                    const double before = energy(s);
+                    collision::resolveImpact(s, {0, 1, 0}, {}, material, 0.2);
+                    check(energy(s) <= before+1e-12, "impact created energy");
+                }
             }
+        }},
+        {"turf impact braking is capped at tangential speed", [] {
+            auto m = frictionless(0.22);
+            m.impactBraking = 0.55;
+            BallState s;
+            s.velocity = {2, -10, 0};
+            collision::resolveImpact(s, {0, 1, 0}, {}, m, 0.2);
+            near(s.velocity, {0, 2.2, 0}, 1e-12, "braking cannot reverse travel");
         }},
         {"pure rolling conserves speed without resistance", [] {
             BallState s = rollingBall(2);
